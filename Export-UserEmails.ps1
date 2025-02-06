@@ -16,12 +16,27 @@ $clientSecretCredential = New-Object `
     -ArgumentList $applicationId, $clientSecret
 Connect-MgGraph -TenantId $tenantID -ClientSecretCredential $clientSecretCredential 
 
+# Retrieve the token
+$context = Get-MgContext
+if ($null -eq $context) {
+    Write-Host "Failed to retrieve Microsoft Graph context."
+    exit
+}
+
+$token = $context.AccessToken
+if ($null -eq $token) {
+    Write-Host "Failed to retrieve access token."
+    exit
+}
+
+Write-Host "Connected to Microsoft Graph with token: $token"
+
 # Ensure the application has Mail.Read or Mail.ReadBasic permissions 
 # Make sure its for all mailboxes cause there is also a Mail.Read for current user only
 
 # Store email sent in a specific period 
 $startDate = "2018-12-01T00:00:00Z"
-$endDate = "2018-12-07T00:00:00Z"
+$endDate = "2018-12-02T00:00:00Z"
 
 
 Write-Host "Gettings emails for $emailUserId sent between $startDate and $endDate"  
@@ -54,7 +69,7 @@ else {
 foreach ($message in $messages) {
     # Create a filename with email subject and received date
     $fileName = ($File = "$($message.subject) $($message.ReceivedDateTime).eml").Split([IO.Path]::GetInvalidFileNameChars()) -join '_'
-    $outFile = $filePath + $file
+    $outFile = $filePath + $fileName
     $parentFolder = $message.parentFolderId
 
     # Get the name of the parent folder
@@ -69,11 +84,44 @@ foreach ($message in $messages) {
     try {
         Get-MgUserMessageContent -UserId $emailUserid -MessageId $message.id -OutFile $outfile
         Write-Host "Exported email $outfile in folder $parentFolderName"
+
+        # If attachments save it to a folder 
+        $attachments = Get-MgUserMessageAttachment -UserId $emailUserid -MessageId $message.id 
+        $attachmentsCount = $attachments.Count
+        Write-Host "email has $attachmentsCount attachments"
+
+        if ($attachmentsCount -gt 0) {
+        
+            $attachmentFolder = $filePath + $fileName + "_attachments"
+            if (!(Test-Path $attachmentFolder)) {
+                New-Item -ItemType Directory -Path $attachmentFolder
+            }
+            
+            foreach ($attachment in $attachments) {
+                $attachmentFileName = $attachmentFolder + "/" + ($attachment.Name -replace '[<>:"/\\|?*]', '_')
+                      
+                # Retrieve and save the attachment content
+                try {
+                    $attachmentContent = Invoke-RestMethod -Uri "https://graph.microsoft.com/v1.0/users/$emailUserid/messages/$($message.id)/attachments/$($attachment.Id)/$value" -Headers @{Authorization = "Bearer $($token)"}
+                    [System.IO.File]::WriteAllBytes($attachmentFileName, [System.Convert]::FromBase64String($attachmentContent.ContentBytes))
+        
+                    Write-Host "Exported attachment $attachmentFileName"
+                }
+                Catch {
+                    Write-Host "Failed to export attachment $attachmentFileName : $_"
+                }        
+            }
+        }    
+
+        # Delete the email after exporting
+        #Remove-MgUserMessage -UserId $emailUserid -MessageId $message.id
+        #Write-Host "Deleted email $message.id"
+
     }
     Catch {
         Write-Host "Unable to export email $fileName in folder $parentFolderName : $_"
     }    
     
     # for testing, only process the first email
-    break
+    #break
 }
