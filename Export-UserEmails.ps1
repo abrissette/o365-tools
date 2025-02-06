@@ -2,33 +2,36 @@
 Import-Module Microsoft.Graph
 
 ## Define information here
-$ApplicationId = "a97957e3-f190-4b60-b21c-aee9c39f05da" # Your Application (client) ID
+$applicationId = "a97957e3-f190-4b60-b21c-aee9c39f05da" # Your Application (client) ID
 $tenantID = "656a82e9-959e-499b-84f6-2357caca4966" # Your Tenant ID
-$filepath = "$HOME/Downloads/it/" 
-$EmailUserId = "mnadeau@caresimple.com"
+$filePath = "$HOME/Downloads/it/" 
+$emailUserId = "mnadeau@caresimple.com"
 
 # Prompt user for the client secret
-$ClientSecret = Read-Host -Prompt "Enter the client secret" -AsSecureString
+$clientSecret = Read-Host -Prompt "Enter the client secret" -AsSecureString
 
 # Connect to Microsoft Graph
-$ClientSecretCredential = New-Object `
+$clientSecretCredential = New-Object `
     -TypeName System.Management.Automation.PSCredential `
-    -ArgumentList $ApplicationId, $ClientSecret
-Connect-MgGraph -TenantId $tenantID -ClientSecretCredential $ClientSecretCredential 
+    -ArgumentList $applicationId, $clientSecret
+Connect-MgGraph -TenantId $tenantID -ClientSecretCredential $clientSecretCredential 
 
-# Ensure the application has Mail.Read or Mail.ReadBasic permissions
+# Ensure the application has Mail.Read or Mail.ReadBasic permissions 
+# Make sure its for all mailboxes cause there is also a Mail.Read for current user only
+
 # Store email sent in a specific period 
-$endDate = "2019-01-01T00:00:00Z"
 $startDate = "2018-12-01T00:00:00Z"
+$endDate = "2018-12-07T00:00:00Z"
 
-Write-Host "Gettings emails for $EmailUserId sent between $startDate and $endDate"  
+
+Write-Host "Gettings emails for $emailUserId sent between $startDate and $endDate"  
 
 try {
     # Get received messages
-    $receivedMessages = Get-MgUserMessage -UserId $EmailUserId -Filter "receivedDateTime ge $startDate and receivedDateTime le $endDate" -All
+    $receivedMessages = Get-MgUserMessage -UserId $emailUserId -Filter "receivedDateTime ge $startDate and receivedDateTime le $endDate" -All
 
     # Get sent messages
-    $sentMessages = Get-MgUserMessage -UserId $EmailUserId -Filter "receivedDateTime ge $startDate and receivedDateTime le $endDate and from/emailAddress/address eq '$EmailUserId'" -All 
+    $sentMessages = Get-MgUserMessage -UserId $emailUserId -Filter "receivedDateTime ge $startDate and receivedDateTime le $endDate and from/emailAddress/address eq '$emailUserId'" -All 
 
     # Combine both received and sent messages
     $messages = $receivedMessages + $sentMessages
@@ -47,19 +50,30 @@ else {
     Write-Host $messages. "$messageCount messages were retrieved"
 }
 
-# Download all emails (example placeholder for further processing)
+# Download all emails 
 foreach ($message in $messages) {
-    # Create a filename based on the received date and email subject
-    $receivedDate = $message.ReceivedDateTime.ToString("yyyyMMdd_HHmmss")
-    $subject = $message.Subject -replace '[\\/:*?"<>|]', '' # Remove invalid filename characters
-    $filename = "$filepath$receivedDate`_$subject.txt"
+    # Create a filename with email subject and received date
+    $fileName = ($File = "$($message.subject) $($message.ReceivedDateTime).eml").Split([IO.Path]::GetInvalidFileNameChars()) -join '_'
+    $outFile = $filePath + $file
+    $parentFolder = $message.parentFolderId
+
+    # Get the name of the parent folder
+    try {
+        $parentFolderName = (Get-MgUserMailFolder -UserId $emailUserid -MailFolderId $parentFolder).DisplayName
+    }
+    Catch {
+        $parentFolderName = "Unknown Folder"
+}
 
     # Save the email content to a file
-    $messageBody = $message.Body.Content
-    $messageBody | Out-File -FilePath $filename -Encoding UTF8   
+    try {
+        Get-MgUserMessageContent -UserId $emailUserid -MessageId $message.id -OutFile $outfile
+        Write-Host "Exported email $outfile in folder $parentFolderName"
+    }
+    Catch {
+        Write-Host "Unable to export email $fileName in folder $parentFolderName : $_"
+    }    
     
-    Write-Host "Saving email to $filename"
-
     # for testing, only process the first email
     break
 }
