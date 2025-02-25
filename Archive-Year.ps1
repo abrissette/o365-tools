@@ -18,6 +18,7 @@ $clientSecretCredential = New-Object `
 Connect-MgGraph -TenantId $tenantID -ClientSecretCredential $clientSecretCredential 
 
 # Check if the folder for the year already exists
+# Thanks to @alitarjan.bsky.social who unblocked me for the folder verification and creation
 try {
     $yearFolder = Get-MgUserMailFolder -UserId $userId -Filter "DisplayName eq '$yearFolderName'" -ErrorAction Stop | Select-Object DisplayName
 } 
