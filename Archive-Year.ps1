@@ -8,7 +8,8 @@ $clientSecret = Read-Host -Prompt "Enter the client secret" -AsSecureString
 
 # Define the user, the archive folder, and the year to archive
 $userId = "abrissette@tactiohealth.com"
-$year = "2019"
+#$userId = "mnadeau@caresimple.com"
+$year = "2023"
 $yearFolderName = "Inbox $year"
 
 # Connect to Microsoft Graph
@@ -20,18 +21,19 @@ Connect-MgGraph -TenantId $tenantID -ClientSecretCredential $clientSecretCredent
 # Check if the folder for the year already exists
 # Thanks to @alitarjan.bsky.social who unblocked me for the folder verification and creation
 try {
-    $yearFolder = Get-MgUserMailFolder -UserId $userId -Filter "DisplayName eq '$yearFolderName'" -ErrorAction Stop | Select-Object DisplayName
+    $yearFolder = Get-MgUserMailFolder -UserId $userId -Filter "DisplayName eq '$yearFolderName'" -ErrorAction Stop | Select-Object DisplayName, Id
 } 
 catch {
     Write-Host "Error retrieving folders for user: $($userId)" -ForegroundColor Red
     Exit
 }
+
 if (-not $yearFolder) {
     # If the folder does not exist, create it
     $body = @{
         DisplayName = $yearFolderName
     }
-    $null = New-MgUserMailFolder -UserId $userId -BodyParameter $body
+    $yearFolder = New-MgUserMailFolder -UserId $userId -BodyParameter $body
 
     Write-Host "Folder '$yearFolderName' has been added for user: $($userId)" -ForegroundColor Green
 }
@@ -39,8 +41,7 @@ else {
     Write-Host "Folder '$yearFolderName' already exists for user: $($userId)" -ForegroundColor Yellow
 }
 
-<#
- # {# Connect to Exchange Online - Favor Exo commandlet when available for performance / bulk support reasons  
+# Connect to Exchange Online - Favor Exo commandlet when available for performance / bulk support reasons  
 $userPrincipal = "mso365@tactiohealth.com"
 try {
     Connect-ExchangeOnline -UserPrincipalName $userPrincipal -ShowProgress $true
@@ -48,28 +49,17 @@ try {
 catch {
     Write-Host "Failed to connect to Exchange Online: $_"
     exit
-}:Enter a comment or description}
-#>
-
-
-
-<#
-Foreach($user in $userList){ 
-
-New-InboxRule -Name " Move Emails to Unifier Folder " -Mailbox $user -From "test@test.com" -MoveToFolder ($Mailbox.alias+': \ testfolder ') 
-
 }
-#>
 
-<#
+# Create a rule to move inbox email for the period into the folder for the year
+try {
+    New-InboxRule -Name "Archive $year inbox email" -Mailbox $userId -ReceivedAfterDate "$year-01-01T00:00:00Z" -ReceivedBeforeDate "$year-12-31T23:59:59Z" -MoveToFolder "$userId`:\$yearFolderName" -StopProcessingRules $true
+    Write-Host "Inbox rule created successfully for $userId" -ForegroundColor Green
+}
+catch {
+    Write-Host "Failed to create inbox rule: $_"
+}
+
+# ...then enable auto archive of all message in year folder into In Place Archive coresponding folder
 
 
- # Move all email of the year, in Inbox, to the archive folder for the year
-foreach ($email in $oldEmails) {
-    Move-Mailbox -Identity $UserId -SourceFolder "Inbox" -DestinationFolder "Archive" -Subject $email.Subject
-}:Enter a comment or description}
-Move-MgUserMailFolderMessage
-    -MailFolderId <String>
-    -MessageId <String>
-    -UserId <String>
-#>
