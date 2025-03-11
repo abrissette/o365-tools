@@ -11,3 +11,6 @@ Remove-CalendarEvents -Identity reboustani@tactiohealth.com -CancelOrganizedMeet
 Get-EXOMailboxPermission -Identity abrissette@tactiohealth.com | Format-List
 
 Add-MailboxPermission -Identity abrissette -User mso365 -AccessRights FullAccess
+
+# Force MRM / Retention Policy to be apply immediately
+Start-ManagedFolderAssistant -Identity "mnadeau@tactiohealth.com"                               
