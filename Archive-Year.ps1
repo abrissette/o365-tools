@@ -7,9 +7,9 @@ $tenantID = "656a82e9-959e-499b-84f6-2357caca4966" # Your Tenant ID
 $clientSecret = Read-Host -Prompt "Enter the client secret" -AsSecureString
 
 # Define the user, the archive folder, and the year to archive
-$userId = "abrissette@tactiohealth.com"
-#$userId = "mnadeau@caresimple.com"
-$year = "2023"
+#$userId = "abrissette@tactiohealth.com"
+$userId = "mnadeau@caresimple.com"
+$year = Read-Host -Prompt "Enter year to archive" 
 $yearFolderName = "Inbox $year"
 
 # Connect to Microsoft Graph
@@ -18,8 +18,7 @@ $clientSecretCredential = New-Object `
     -ArgumentList $applicationId, $clientSecret
 Connect-MgGraph -TenantId $tenantID -ClientSecretCredential $clientSecretCredential 
 
-# Check if the folder for the year already exists
-# Thanks to @alitarjan.bsky.social who unblocked me for the folder verification and creation
+# Check if the folder for the year already exists under 
 try {
     $yearFolder = Get-MgUserMailFolder -UserId $userId -Filter "DisplayName eq '$yearFolderName'" -ErrorAction Stop | Select-Object DisplayName, Id
 } 
@@ -44,22 +43,57 @@ else {
 # Connect to Exchange Online - Favor Exo commandlet when available for performance / bulk support reasons  
 $userPrincipal = "mso365@tactiohealth.com"
 try {
-    Connect-ExchangeOnline -UserPrincipalName $userPrincipal -ShowProgress $true
+    Connect-ExchangeOnline -UserPrincipalName $userPrincipal -Device
 }
 catch {
     Write-Host "Failed to connect to Exchange Online: $_"
     exit
 }
 
-# Create a rule to move inbox email for the period into the folder for the year
+# Replicate a "move to folder" rule manually for existing messages
+$messages = Get-MgUserMailFolderMessage -UserId $userId `
+    -MailFolderId "inbox" -All -PageSize 100 `
+    -Filter "receivedDateTime ge $year-01-01T00:00:00Z and receivedDateTime le $year-12-31T23:59:59Z"
+
+$total = $messages.Count
+$count = 0
+Write-Host "Moving $total messages from Inbox to '$yearFolderName'..." -ForegroundColor Cyan
+
+foreach ($message in $messages) {
+    try {
+        Move-MgUserMessage -UserId $userId `
+            -MessageId $message.Id `
+            -BodyParameter @{ DestinationId = $yearFolder.Id }
+        $count++
+        if ($count % 100 -eq 0) {
+            Write-Host "  Moved $count / $total messages..." -ForegroundColor Cyan
+        }
+    }
+    catch {
+        Write-Host "  Failed to move message $($message.Id): $_" -ForegroundColor Red
+    }
+}
+
+Write-Host "Done. Sorted $count / $total messages to '$yearFolderName'." -ForegroundColor Green
+
+# Apply "Move to Archive Immediately" retention tag to the year folder
+$tagId = "bdc79f42-c30c-4ed6-9635-d450567e1d1a"
 try {
-    New-InboxRule -Name "Archive $year inbox email" -Mailbox $userId -ReceivedAfterDate "$year-01-01T00:00:00Z" -ReceivedBeforeDate "$year-12-31T23:59:59Z" -MoveToFolder "$userId`:\$yearFolderName" -StopProcessingRules $true
-    Write-Host "Inbox rule created successfully for $userId" -ForegroundColor Green
+    $folder = Get-MgUserMailFolder -UserId $userId -Filter "DisplayName eq '$yearFolderName'" -ErrorAction Stop
+    Update-MgUserMailFolder -UserId $userId -MailFolderId $folder.Id `
+        -BodyParameter @{ retentionTag = @{ isExplicit = $true; tagId = $tagId } }
+    Write-Host "Retention tag applied to '$yearFolderName'" -ForegroundColor Green
 }
 catch {
-    Write-Host "Failed to create inbox rule: $_"
+    Write-Host "Failed to apply retention tag to '$yearFolderName': $_" -ForegroundColor Red
 }
 
-# ...then enable auto archive of all message in year folder into In Place Archive coresponding folder
-
+# Trigger Managed Folder Assistant to process the tag immediately
+try {
+    Start-ManagedFolderAssistant -Identity $userId
+    Write-Host "Managed Folder Assistant triggered for $userId" -ForegroundColor Green
+}
+catch {
+    Write-Host "Failed to trigger Managed Folder Assistant: $_" -ForegroundColor Red
+}
 

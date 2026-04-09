@@ -2,7 +2,11 @@
 
 # connect to O365 to manage Exchange.  
 # Overlap with mgConnect-Graph but provide access to more Exchange cmdlets
-Connect-ExchangeOnline -UserPrincipalName mso365@tactiohealth.com -ShowProgress $true
+
+#Connect-ExchangeOnline -UserPrincipalName mso365@tactiohealth.com -ShowProgress $true
+
+Connect-ExchangeOnline -UserPrincipalName mso365@tactiohealth.com -Device
+
 
 # Remove all calendar events for someone
 Remove-CalendarEvents -Identity reboustani@tactiohealth.com -CancelOrganizedMeetings -QueryWindowInDays 120
@@ -13,4 +17,4 @@ Get-EXOMailboxPermission -Identity abrissette@tactiohealth.com | Format-List
 Add-MailboxPermission -Identity abrissette -User mso365 -AccessRights FullAccess
 
 # Force MRM / Retention Policy to be apply immediately
-Start-ManagedFolderAssistant -Identity "mnadeau@tactiohealth.com"                               
+Start-ManagedFolderAssistant -Identity "mnadeau@tactiohealth.com"                               Get-Mailbox mnadeau@caresimple.com | FL RetentionPolicy
