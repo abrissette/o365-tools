@@ -17,4 +17,10 @@ Get-EXOMailboxPermission -Identity abrissette@tactiohealth.com | Format-List
 Add-MailboxPermission -Identity abrissette -User mso365 -AccessRights FullAccess
 
 # Force MRM / Retention Policy to be apply immediately
-Start-ManagedFolderAssistant -Identity "mnadeau@tactiohealth.com"                               Get-Mailbox mnadeau@caresimple.com | FL RetentionPolicy
+Start-ManagedFolderAssistant -Identity "mnadeau@tactiohealth.com"   
+
+Get-Mailbox mnadeau@caresimple.com | FL RetentionPolicy
+
+# Troubleshoot index  (With new Outlook Desktop, indexing is on server side)
+Connect-ExchangeOnline -UserPrincipalName admin@yourdomain.com -Device
+Get-MailboxStatistics user@domain.com | FL BigFunnel*
